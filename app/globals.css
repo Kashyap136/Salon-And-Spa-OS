@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-cormorant: "Cormorant Garamond", Georgia, serif;
+  --font-manrope: "Manrope", system-ui, sans-serif;
+}
+
+html, body {
+  background: #2A0F1C;
+  color: #F3E9DE;
+}
+
+body {
+  font-family: var(--font-manrope);
+  background-image:
+    radial-gradient(circle at 15% 0%, rgba(201, 161, 90, 0.06), transparent 45%),
+    radial-gradient(circle at 85% 100%, rgba(212, 106, 133, 0.05), transparent 45%);
+  background-attachment: fixed;
+}
+
+/* Ledger rule lines instead of card shadows */
+.ledger-panel {
+  background: #3D1A2B;
+  border: 1px solid rgba(201, 161, 90, 0.22);
+  border-radius: 2px;
+}
+
+.ledger-rule {
+  border-bottom: 1px solid rgba(201, 161, 90, 0.18);
+}
+
+.ledger-table th {
+  font-family: var(--font-manrope);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: #D9C7B8;
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(201, 161, 90, 0.35);
+}
+
+.ledger-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(201, 161, 90, 0.12);
+  font-size: 0.88rem;
+}
+
+.ledger-table tr:hover td {
+  background: rgba(201, 161, 90, 0.05);
+}
+
+.gold-line {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(201,161,90,0.6), rgba(201,161,90,0.05));
+}
+
+input, select, textarea {
+  background: rgba(243, 233, 222, 0.05);
+  border: 1px solid rgba(201, 161, 90, 0.3);
+  color: #F3E9DE;
+  border-radius: 2px;
+  padding: 9px 12px;
+  font-family: var(--font-manrope);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+input::placeholder, textarea::placeholder {
+  color: rgba(217, 199, 184, 0.45);
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #C9A15A;
+}
+
+.btn-gold {
+  background: #C9A15A;
+  color: #2A0F1C;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 9px 18px;
+  border-radius: 2px;
+  transition: background 0.15s ease;
+}
+.btn-gold:hover { background: #E0BD7C; }
+.btn-gold:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-ghost {
+  border: 1px solid rgba(201, 161, 90, 0.4);
+  color: #F3E9DE;
+  font-size: 0.85rem;
+  padding: 8px 16px;
+  border-radius: 2px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.btn-ghost:hover { border-color: #C9A15A; background: rgba(201,161,90,0.08); }
+
+.pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.01em;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #2A0F1C; }
+::-webkit-scrollbar-thumb { background: rgba(201,161,90,0.35); border-radius: 6px; }
