@@ -1,0 +1,33 @@
+{
+  "name": "salon-spa-os-backend",
+  "version": "1.0.0",
+  "description": "Salon & Spa OS — REST API backend (Express + MongoDB)",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node app.js",
+    "test": "node scripts/run-e2e.js"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.8.1",
+    "multer": "^2.4.0",
+    "node-cron": "^3.0.3",
+    "pdfkit": "^0.15.2",
+    "qrcode": "^1.5.4",
+    "razorpay": "^2.9.4"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^10.1.2"
+  }
+}
