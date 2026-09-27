@@ -3,6 +3,9 @@ node_modules/
 .env.local
 uploads/*
 !uploads/.gitkeep
-public/exports/*
-!public/exports/.gitkeep
+# Generated financial/PII documents (invoice PDFs, audit workbooks) must never
+# be committed — they are produced on demand and served only over the
+# authenticated API.
+exports/
+public/exports/
 *.log

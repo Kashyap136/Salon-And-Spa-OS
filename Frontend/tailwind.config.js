@@ -6,6 +6,18 @@ module.exports = {
   ],
   theme: {
     extend: {
+      // Two extra screen tokens so "collapse the side-by-side layouts" and
+      // "compact everything for the ultra-narrow band" are named decisions
+      // instead of scattered ad-hoc `min-[...px]:` variants.
+      //
+      // narrow: below this a two-up form row squeezes each control to less than
+      //         the width of its own longest word, so pairs stack instead.
+      // tiny:   below the narrowest real handset, padding/type/control sizing
+      //         step down so a single word still fits its column.
+      screens: {
+        narrow: "380px",
+        tiny: "220px",
+      },
       colors: {
         ledger: {
           base: "#2A0F1C",

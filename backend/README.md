@@ -30,26 +30,62 @@ Health check: `GET /api/health` → `{ ok: true, service: "salon-spa-os-backend"
 
 ## 2. Environment variables
 
-See `.env.example` for the full list:
+See `.env.example` for the full annotated list.
 
-| Variable            | Purpose                                                    |
-| ------------------- | ---------------------------------------------------------- |
-| `PORT`              | Server port (default `5005`)                               |
-| `MONGO_URI`         | MongoDB connection string (local or Atlas)                 |
-| `MONGO_DB`          | Optional database name override                            |
-| `DNS_SERVERS`       | Optional — comma-separated resolvers to pin Node's DNS (see §3) |
-| `JWT_SECRET`        | Secret used to sign auth tokens                            |
-| `RAZORPAY_KEY`      | Razorpay key id                                            |
-| `RAZORPAY_SECRET`   | Razorpay key secret (payment signature verification)       |
-| `WHATSAPP_TOKEN`    | Meta Cloud API bearer token                                |
-| `WHATSAPP_PHONE_ID` | Meta WhatsApp phone number id                              |
-| `UPI_ID`            | UPI id used in booking confirmations / invoice QR codes    |
-| `TZ`                | Cron timezone (default `Asia/Kolkata`)                     |
-| `ALERT_TO`          | Low-stock alert recipient (reserved)                       |
+| Variable            | Purpose                                                    | Required in production |
+| ------------------- | ---------------------------------------------------------- | --------------------- |
+| `PORT`              | Server port (default `5005`)                               | no                    |
+| `NODE_ENV`          | `production` enables the startup guard (§2) and makes `DISABLE_CRON` a no-op | no            |
+| `MONGO_URI`         | MongoDB connection string (local or Atlas)                 | **yes**               |
+| `MONGO_DB`          | Optional database name override                            | no                    |
+| `DNS_SERVERS`       | Optional — comma-separated resolvers to pin Node's DNS (see §3) | no               |
+| `JWT_SECRET`        | Secret used to sign auth tokens (≥ 32 random bytes)        | **yes**               |
+| `CORS_ORIGIN`       | Comma-separated allowlist of browser origins (`FRONTEND_URL` is accepted as a legacy alias) | **yes** |
+| `RAZORPAY_KEY`      | Razorpay key id                                            | no                    |
+| `RAZORPAY_SECRET`   | Razorpay key secret (payment signature verification)       | no                    |
+| `WHATSAPP_TOKEN`    | Meta Cloud API bearer token                                | no                    |
+| `WHATSAPP_PHONE_ID` | Meta WhatsApp phone number id                              | no                    |
+| `ATTENDANCE_API_KEY`| Shared secret for eSSL device sync (`x-attendance-key`)    | no                    |
+| `UPI_ID`            | UPI id used in booking confirmations / invoice QR codes    | no                    |
+| `TZ`                | Cron timezone (default `Asia/Kolkata`)                     | no                    |
+| `DISABLE_CRON`      | Start the API with the background timers parked. **Ignored, with a warning, when `NODE_ENV=production`** (see §7) | no |
+
+### Production startup guard
+
+When `NODE_ENV=production` the server **refuses to boot** unless `JWT_SECRET`,
+`MONGO_URI` and a CORS allowlist are all set, and it names every missing one:
+
+```
+Failed to start backend: required in production but not set — JWT_SECRET, MONGO_URI
+```
+
+Each of those three changes behaviour rather than breaking a request, which is
+exactly why a hard stop is needed: without them a live deployment would sign
+tokens with a shared secret, point at a database that is not there, and serve
+every origin to a multi-tenant API. Outside production, `MONGO_URI` falls back to
+`mongodb://localhost:27017/salon_spa_os` **and logs a warning**.
+
+### Integration mode is reported, not assumed
+
+On every boot the server logs which external integrations will really reach
+their provider:
+
+```
+[config] 3/3 integrations are NOT configured — WhatsApp (Meta Cloud API)
+(messages are logged locally and NOT delivered); Razorpay (checkout is
+unavailable; settle by UPI/cash); eSSL attendance devices (device sync is
+disabled (owner-signed sync still works))
+```
+
+Missing optional integrations never stop the boot — a salon can legitimately run
+UPI/cash only — but the state is stated explicitly so "3 reminders queued" is
+never mistaken for "3 reminders delivered".
 
 No real credentials are committed. The backend falls back to a **mock WhatsApp
 mode** and guarded errors when credentials are absent — the app never crashes for
-missing external configuration.
+missing external configuration. `POST /api/whatsapp/send` reports
+`mocked: true` in that case; the WhatsApp message **body** is never logged (only
+the recipient's last four digits and the character count).
 
 ## 3. MongoDB
 
@@ -247,29 +283,99 @@ Response: `{ fileUrl: "/public/exports/audit-…xlsx", count }`.
 
 ## 6. Upload handling & static files
 
-- Multer (disk storage), image files only (jpeg/png/webp/gif), max 5 MB.
-- Documents store relative URLs, e.g. `/uploads/services/xxx.png` — the frontend
-  resolves these through its `fileUrl()` helper.
-- Served from: `/uploads/*` → `backend/uploads/*` and `/public/*` → `backend/public/*`.
+### User images (services / staff / products)
+
+- Multer (disk storage), image files only (jpeg/png/webp/gif), max 5 MB, max 5
+  files per product.
+- Every upload is **verified by magic bytes** after Multer writes it, so a
+  renamed script or an HTML/SVG polyglot is rejected whatever it claims its
+  content type to be. The extension is derived from the detected type, never
+  from the filename. Filenames are `Date.now()` + 8 random bytes.
+- Files are stored **partitioned per tenant**: `uploads/<folder>/<companyId>/<file>`.
+  Records store the matching relative URL, e.g.
+  `/uploads/services/6ab67…/1756…-a1b2c3d4.png`, and the frontend resolves it
+  through its `fileUrl()` helper. Both the directory and the stored URL are
+  produced by the same `uploadDir()` / `uploadUrl()` helpers in
+  `middleware/upload.js`, so they cannot drift apart.
+- Served from `/uploads/*` → `backend/uploads/*` as **public static files**, with
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and
+  `Referrer-Policy: no-referrer`.
+
+  This has to stay public: the public booking page shows service images to
+  anonymous visitors, and an `<img>` tag cannot carry a bearer token. So
+  partitioning is defence in depth — it guarantees two salons can never collide
+  on, overwrite or mis-attribute a file — not the access control. Making staff
+  and product images private would mean proxying them through an authenticated
+  route and fetching them as blobs. Do not add a plain static mount for any
+  other directory.
+
+### Generated documents (invoice PDFs, audit workbooks)
+
+**There is deliberately no static mount for these.** They contain customer names,
+phones and revenue, so they are written **outside** any publicly servable
+directory and are served *only* through authenticated routes that call
+`res.download()`:
+
+| Document        | Written to                     | Served by                           |
+| --------------- | ------------------------------ | ----------------------------------- |
+| Invoice PDF     | `backend/exports/invoices/`    | `GET /api/invoices/pdf/:id`         |
+| Audit workbook  | `backend/exports/audit/`       | `GET /api/audit/download?year=YYYY` |
+
+The paths are fixed in code — `INVOICE_DIR` in `utils/pdf.js` and `EXPORT_DIR` in
+`routes/audit.js` — both `path.join(__dirname, "..", "exports", …)`.
+
+`GET /api/audit/export` returns `{ fileUrl: "/api/audit/download?year=YYYY", count }`
+— an **API** path, not a static one. A request for `/exports/…` or
+`/public/exports/…` returns 404 by design; the only static mount in the whole app
+is `/uploads` (see above). The entire `exports/` tree is git-ignored.
+
+> Note: a `backend/public/exports/` directory may exist on a machine that ran an
+> older build, from before the export directories were moved out of `public/`.
+> Nothing reads it and it should be deleted. If you ever find yourself adding
+> `app.use("/public", express.static(…))` to "fix" a 404 on an export path, that
+> is the bug — it would publish every customer's invoice and revenue.
 
 ## 7. Cron jobs (`cron.js` — auto-started by `app.js`, guarded against duplicate registration)
 
 | Schedule            | Job                                                                 |
 | ------------------- | ------------------------------------------------------------------- |
-| 08:00               | Reminder for **tomorrow's** bookings (Marathi + map) + membership expiry alerts (7 days out) + auto-expire overdue memberships |
-| 18:00               | No-show check — today's `booked` slots whose end time passed become `no-show` (advance retained); WhatsApp notice sent |
-| 09:00 (daily)       | Low-stock alert for `stock <= minStock` products                     |
-| 09:15 (daily)       | Deactivate expired offers (`validUntil` passed) and offers whose `usedCount >= usageLimit` |
+| **every 5 min** (`*/5 * * * *`) | Release stale booking-completion claims (`reapStaleCompletionClaims`) and expire abandoned payment orders (`expireStaleOrders`) so a wedged checkout cannot block a customer forever |
+| **every 30 min** (`*/30 * * * *`) | No-show sweep — `booked` bookings on the last two days whose last occupied slot ended more than 60 minutes ago become `no-show` (advance retained). Claims each booking atomically, releases offer usage, retires any still-payable advance order, then sends the WhatsApp notice |
+| 08:00 (`0 8 * * *`) | Reminder for **tomorrow's** bookings (Marathi + map) + membership expiry alerts (7 days out) + auto-expire overdue memberships |
+| 09:00 (`0 9 * * *`) | Low-stock alert for `stock <= minStock` products                     |
+| 09:15 (`15 9 * * *`) | Deactivate expired offers (`validUntil` passed) and offers whose `usedCount >= usageLimit` |
 
-Timezone: `TZ` env (default `Asia/Kolkata`).
+Timezone: `TZ` env (default `Asia/Kolkata`). Every job body is wrapped in
+`try/catch`, so a failing job logs and returns rather than taking the process
+down or aborting the remaining jobs in that tick.
+
+Set `DISABLE_CRON=1` to start the API with all of these parked (useful for a
+test harness or a maintenance window). It is **ignored, with a warning, when
+`NODE_ENV=production`** — a production deployment whose sweeps silently never
+run would be a correctness bug.
 
 ## 8. Deployment
 
 Works on Render / Railway / any Node host:
 
-1. Set the env vars listed in section 2 (startup runs `npm start` → `node app.js`).
-2. The frontend points at `NEXT_PUBLIC_API_URL=https://<your-backend-domain>/api`.
-3. Static `/uploads` and `/public` folders are created automatically on first use.
+1. Set the env vars listed in section 2. `JWT_SECRET`, `MONGO_URI` and
+   `CORS_ORIGIN` are **required** when `NODE_ENV=production` — the server exits
+   with a message naming each one that is missing rather than starting in a
+   degraded state. List every browser origin that will call the API, including
+   the public booking page's own domain.
+2. Build the frontend with `NEXT_PUBLIC_API_URL=https://<your-backend-domain>/api`.
+   The frontend build **fails** if that value is missing or points at
+   `localhost`/`127.0.0.1`, because those names resolve on the visitor's device.
+3. `uploads/` and `exports/` are created automatically on first use. The build
+   host must have a writable disk for both. Neither may be exposed by the
+   platform's static file serving: `/uploads` is served by the app itself, and
+   `exports/` is served only over authenticated routes.
+4. Health check for the platform: `GET /api/health` → `{ "ok": true }`. It does
+   not touch the database, so use it for liveness and watch the startup log for
+   `[db] connected to MongoDB` for readiness.
+5. At boot the server logs which integrations are live and which are mocked
+   (see §2). Treat a `[config] … are NOT configured` line as a deployment
+   defect, not a notice, if you intended those features to work.
 
 ## 9. Testing
 
@@ -284,7 +390,7 @@ booking + **409 double-booking**, offer/membership/invoice math, stock deduction
 payments (signature verification), WhatsApp mock, attendance (incl. cross-salon eSSL
 scoping), salon settings GET/PUT (secret-leak guard), reviews, leads, audit export,
 calendar, public endpoints, multi-tenant isolation, and edge cases. Current suite:
-**73 assertions**. Run `npm test` and look for `===== RESULTS: 73 passed, 0 failed =====`.
+**179 assertions**. Run `npm test` and look for `===== RESULTS: 179 passed, 0 failed =====`.
 
 External integrations (Meta WhatsApp, Razorpay orders, eSSL devices) use safe mock /
 latent paths when credentials or hardware are unavailable — nothing is faked as a

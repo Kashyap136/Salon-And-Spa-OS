@@ -1,23 +1,30 @@
 const Booking = require("../models/Booking");
-const { effectiveCompany, isYM } = require("./helpers");
+const { isRealMonth, localYM, AppError } = require("./helpers");
 
 /**
  * Calendar data grouped by date (YYYY-MM-DD).
  * Returns { byDate: { "2026-05-13": [booking, ...] }, total }.
  * Shared by /api/bookings/calendar and /api/calendar.
+ *
+ * Always mounted behind authRequired, so the tenant comes from the JWT.
  */
 async function calendarHandler(req, res, next) {
   try {
-    const companyId = effectiveCompany(req, req.query.companyId);
+    const companyId = req.companyId;
     if (!companyId) {
-      return res.json({ byDate: {}, total: 0 });
+      return res.status(401).json({ msg: "Authentication required" });
     }
 
-    const filter = { companyId };
-    const month = req.query.month;
-    if (isYM(month)) filter.bookingDate = { $regex: `^${month}` };
+    // A month is required: without it the endpoint would load every booking the
+    // salon has ever made.
+    const month = req.query.month || localYM();
+    if (!isRealMonth(month)) {
+      throw new AppError(400, "month must be in YYYY-MM format");
+    }
 
-    const bookings = await Booking.find(filter).sort({ bookingDate: 1, slot: 1 });
+    const bookings = await Booking.find({ companyId, bookingDate: { $regex: `^${month}` } })
+      .sort({ bookingDate: 1, slot: 1 })
+      .limit(2000);
     const byDate = {};
     for (const b of bookings) {
       const key = b.bookingDate;

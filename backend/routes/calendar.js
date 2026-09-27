@@ -1,8 +1,13 @@
 const express = require("express");
+const { authRequired } = require("../middleware/auth");
 const { calendarHandler } = require("../utils/calendar");
 
-// GET /api/calendar?companyId=&month=YYYY-MM — alias of /api/bookings/calendar.
 const router = express.Router();
-router.get("/", calendarHandler);
+
+// GET /api/calendar?month=YYYY-MM — alias of /api/bookings/calendar.
+// Authenticated and company-scoped: the calendar exposes every booking
+// (customer name, phone, service, staff) and must never be readable
+// anonymously by guessing a companyId.
+router.get("/", authRequired, calendarHandler);
 
 module.exports = router;

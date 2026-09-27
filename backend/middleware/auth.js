@@ -1,11 +1,56 @@
 const jwt = require("jsonwebtoken");
 const Company = require("../models/Company");
 
-const JWT_SECRET = () =>
-  process.env.JWT_SECRET || "dev-secret-change-me-salon-spa-2026";
+/**
+ * The JWT secret is a required secret. A built-in fallback would let anyone
+ * who has read the source mint a valid owner token, so we refuse to sign or
+ * verify with a hardcoded value. Startup validation lives in app.js.
+ */
+function jwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || !String(secret).trim()) {
+    throw new Error("JWT_SECRET is not configured — refusing to use an insecure fallback secret");
+  }
+  return secret;
+}
+
+const ALGORITHM = "HS256";
 
 function signToken(companyId) {
-  return jwt.sign({ companyId }, JWT_SECRET(), { expiresIn: "30d" });
+  return jwt.sign({ companyId: String(companyId) }, jwtSecret(), {
+    algorithm: ALGORITHM,
+    expiresIn: "30d",
+  });
+}
+
+function readBearer(req) {
+  const header = req.headers.authorization || "";
+  return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+}
+
+/**
+ * Verify a bearer token and load the owning company.
+ * Returns { companyId, company } or null when the token is unusable.
+ * A database failure is thrown (not treated as an auth failure) so a Mongo
+ * outage surfaces as 500/503 instead of silently logging every user out.
+ */
+async function resolveToken(req) {
+  const token = readBearer(req);
+  if (!token) return null;
+
+  // Only JWT failures are auth failures.
+  let payload;
+  try {
+    payload = jwt.verify(token, jwtSecret(), { algorithms: [ALGORITHM] });
+  } catch {
+    return { invalid: true };
+  }
+  if (!payload || !payload.companyId) return { invalid: true };
+
+  const company = await Company.findById(payload.companyId);
+  if (!company) return { invalid: true };
+
+  return { companyId: company._id.toString(), company };
 }
 
 /**
@@ -15,44 +60,40 @@ function signToken(companyId) {
  */
 async function authRequired(req, res, next) {
   try {
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-    if (!token) return res.status(401).json({ msg: "Authentication required" });
+    const auth = await resolveToken(req);
+    if (!auth) return res.status(401).json({ msg: "Authentication required" });
+    if (auth.invalid) return res.status(401).json({ msg: "Invalid or expired token" });
 
-    const payload = jwt.verify(token, JWT_SECRET());
-    const company = await Company.findById(payload.companyId);
-    if (!company) return res.status(401).json({ msg: "Invalid token — company not found" });
-
-    req.companyId = company._id.toString();
-    req.company = company;
+    req.companyId = auth.companyId;
+    req.company = auth.company;
     next();
-  } catch {
-    return res.status(401).json({ msg: "Invalid or expired token" });
+  } catch (err) {
+    next(err);
   }
 }
 
 /**
- * Optional auth — used by listing endpoints that the public booking page
- * also calls (e.g. staff/list, offers/list). If a valid token is present,
- * req.companyId is set to the authenticated company so lists are scoped by
- * the server, never by an arbitrary query parameter.
+ * Optional auth — used by genuinely public read endpoints (public catalogs,
+ * reviews). No Authorization header at all means "anonymous" and is allowed.
+ *
+ * A header that is *present but invalid* is a 401 rather than a silent
+ * downgrade to anonymous: otherwise an expired session would silently read
+ * unauthenticated data instead of surfacing the auth failure.
  */
 async function authOptional(req, res, next) {
   try {
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-    if (!token) return next();
-
-    const payload = jwt.verify(token, JWT_SECRET());
-    const company = await Company.findById(payload.companyId);
-    if (company) {
-      req.companyId = company._id.toString();
-      req.company = company;
+    const auth = await resolveToken(req);
+    if (auth && auth.invalid) {
+      return res.status(401).json({ msg: "Invalid or expired token" });
     }
-  } catch {
-    // Invalid token — treat request as unauthenticated.
+    if (auth) {
+      req.companyId = auth.companyId;
+      req.company = auth.company;
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 }
 
-module.exports = { authRequired, authOptional, signToken };
+module.exports = { authRequired, authOptional, signToken, jwtSecret };

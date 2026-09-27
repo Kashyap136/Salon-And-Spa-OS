@@ -28,6 +28,13 @@ const invoiceSchema = new mongoose.Schema({
   gstTotal: { type: Number, default: 0 },
   discount: { type: Number, default: 0 },
   grandTotal: { type: Number, default: 0 },
+  /**
+   * Advance already collected against the originating booking, snapshotted at
+   * invoice time. `grandTotal` is the amount owed in full; the balance still due
+   * is `grandTotal - advancePaid`, and a payment order must be raised for the
+   * balance only.
+   */
+  advancePaid: { type: Number, default: 0 },
   paymentMode: { type: String, default: "UPI" },
   paymentStatus: { type: String, enum: ["pending", "paid"], default: "pending" },
   invoiceNo: { type: String, required: true },
@@ -37,5 +44,11 @@ const invoiceSchema = new mongoose.Schema({
 
 invoiceSchema.index({ companyId: 1, createdAt: -1 });
 invoiceSchema.index({ companyId: 1, invoiceNo: 1 }, { unique: true });
+// One invoice per booking — a database-level guarantee that a retried or
+// double-clicked "complete" can never raise a second invoice.
+invoiceSchema.index(
+  { companyId: 1, bookingId: 1 },
+  { unique: true, partialFilterExpression: { bookingId: { $type: "objectId" } } }
+);
 
 module.exports = mongoose.model("Invoice", invoiceSchema);

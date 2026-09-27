@@ -10,7 +10,9 @@ const companySchema = new mongoose.Schema({
     trim: true,
   },
   ownerEmail: { type: String, required: true, lowercase: true, trim: true },
-  passwordHash: { type: String, required: true },
+  // Never selected by default and stripped from every JSON payload — the login
+  // route must opt in with .select("+passwordHash").
+  passwordHash: { type: String, required: true, select: false },
   salonType: {
     type: String,
     enum: ["unisex", "men", "women", "spa"],
@@ -28,6 +30,15 @@ const companySchema = new mongoose.Schema({
   razorpayKey: { type: String, default: "" },
   logoUrl: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now },
+});
+
+// Defense in depth: even if a document that contains the hash is serialized
+// (explicitly selected, aggregate result, …) the hash never reaches a client.
+companySchema.set("toJSON", {
+  transform(doc, ret) {
+    delete ret.passwordHash;
+    return ret;
+  },
 });
 
 module.exports = mongoose.model("Company", companySchema);

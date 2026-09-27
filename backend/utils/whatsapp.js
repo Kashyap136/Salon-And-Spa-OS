@@ -48,7 +48,7 @@ const T = {
       `नमस्कार ${d.customerName}! तुमची पावती तयार आहे.\n` +
       `🧾 Invoice: ${d.invoiceNo}\n💰 एकूण रक्कम: ₹${d.grandTotal}\n` +
       `💳 UPI: ${d.upiId}\n` +
-      `Download PDF: ${d.pdfUrl}\n${d.salonName}`,
+      `${d.salonName}`,
   },
   Hindi: {
     confirmation: (d) =>
@@ -71,7 +71,7 @@ const T = {
       `नमस्कार ${d.customerName}! आपका इनवॉइस तैयार है।\n` +
       `🧾 Invoice: ${d.invoiceNo}\n💰 कुल राशि: ₹${d.grandTotal}\n` +
       `💳 UPI: ${d.upiId}\n` +
-      `Download PDF: ${d.pdfUrl}\n${d.salonName}`,
+      `${d.salonName}`,
   },
   English: {
     confirmation: (d) =>
@@ -94,7 +94,7 @@ const T = {
       `Hello ${d.customerName}! Your invoice is ready.\n` +
       `🧾 Invoice: ${d.invoiceNo}\n💰 Grand Total: ₹${d.grandTotal}\n` +
       `💳 UPI: ${d.upiId}\n` +
-      `Download PDF: ${d.pdfUrl}\n${d.salonName}`,
+      `${d.salonName}`,
   },
 };
 
@@ -122,7 +122,11 @@ async function sendWhatsAppMessage({ to, text }) {
   const phoneId = process.env.WHATSAPP_PHONE_ID;
 
   if (!token || !phoneId || !to) {
-    console.log(`[whatsapp:mock] to=${to}:\n${text}`);
+    // Mock mode: do NOT log the message body — it contains the customer's
+    // name, booking details and payment coordinates (PII). Log only a masked
+    // recipient and the length so operators can confirm the call path.
+    const masked = String(to).replace(/\D/g, "").slice(-4).padStart(String(to).replace(/\D/g, "").length, "*");
+    console.log(`[whatsapp:mock] to=…${masked} (${String(text).length} chars) — not sent (no credentials)`);
     return { mocked: true, text };
   }
 

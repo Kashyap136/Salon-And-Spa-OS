@@ -27,6 +27,10 @@ body {
   background: #3D1A2B;
   border: 1px solid rgba(201, 161, 90, 0.22);
   border-radius: 2px;
+  /* A panel is often a grid/flex item (form column beside a list). Without this
+     the automatic minimum size let a wide table push the panel past its
+     column, and the overflow escaped to the body. */
+  min-width: 0;
 }
 
 .ledger-rule {
@@ -59,8 +63,13 @@ body {
   background: linear-gradient(90deg, rgba(201,161,90,0.6), rgba(201,161,90,0.05));
 }
 
-/* Text controls get the ledger treatment — checkboxes/radios keep native box sizing. */
-input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+/* Text controls get the ledger treatment — checkboxes/radios keep native box
+   sizing, and file inputs are excluded because they need their own padding
+   and font size (this selector is more specific than `input[type=file]`, so
+   leaving the file type in here would silently beat the rule below). */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+select,
+textarea {
   background: rgba(243, 233, 222, 0.05);
   border: 1px solid rgba(201, 161, 90, 0.3);
   color: #F3E9DE;
@@ -78,8 +87,33 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 input[type="file"] {
+  background: rgba(243, 233, 222, 0.05);
+  border: 1px solid rgba(201, 161, 90, 0.3);
+  color: #F3E9DE;
+  border-radius: 2px;
+  font-family: var(--font-manrope);
+  outline: none;
   padding: 6px 10px;
   font-size: 0.8rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The default file-picker button is wide enough to push the control past a
+   narrow column. Restyle it to the ledger look so the whole input fits; the
+   browser still ellipsises a long filename inside it. */
+input[type="file"]::file-selector-button {
+  background: #4A2033;
+  color: #F3E9DE;
+  border: 1px solid rgba(201, 161, 90, 0.4);
+  border-radius: 2px;
+  padding: 3px 8px;
+  margin-right: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover {
+  border-color: #C9A15A;
 }
 
 select option {
@@ -134,6 +168,221 @@ input:focus, select:focus, textarea:focus {
   letter-spacing: 0.01em;
 }
 
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: #2A0F1C; }
+/* A button label is real content: let it break at spaces rather than run out
+   of its box, but never in the middle of a word. */
+.btn-gold, .btn-ghost, .pill {
+  white-space: normal;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+/* ---------------------------------------------------------------------------
+   Responsive layout primitives
+   ---------------------------------------------------------------------------
+   Before these, the narrowest styled width in the app was Tailwind's `sm`
+   (640px) plus one `min-[420px]` two-column rule, so everything under 420px
+   was unstyled: `px-4` on <main> plus `p-5`/`p-6` on the panel ate ~82px of a
+   122px content box, leaving 40px — less than one word. Headings, labels and
+   buttons then broke mid-word or overflowed the body.
+
+   These give every page ONE shared padding ladder. `narrow` (380px) and `tiny`
+   (220px) are the extra screen tokens in tailwind.config.js; they are
+   deliberately in `@layer components` so a Tailwind utility still wins.
+   Values above 640px match what the pages used before, so the desktop
+   layout is byte-identical.
+--------------------------------------------------------------------------- */
+@layer components {
+  /* Page shell. Replaces `px-4 sm:px-6` (and `px-6` on the dashboard). */
+  .page {
+    padding-inline: 1.5rem;
+  }
+  @media (max-width: 640px) { .page { padding-inline: 1rem; } }
+  @media (max-width: 380px) { .page { padding-inline: 0.75rem; } }
+  @media (max-width: 220px) { .page { padding-inline: 0.5rem; } }
+
+  /* Card padding. Two variants preserve the two sizes in use (p-5, p-6). */
+  .panel-pad { padding: 1.25rem; }
+  @media (max-width: 640px) { .panel-pad { padding: 1.125rem; } }
+  @media (max-width: 380px) { .panel-pad { padding: 0.875rem; } }
+  @media (max-width: 220px) { .panel-pad { padding: 0.5rem; } }
+
+  .panel-pad-lg { padding: 1.5rem; }
+  @media (max-width: 640px) { .panel-pad-lg { padding: 1.25rem; } }
+  @media (max-width: 380px) { .panel-pad-lg { padding: 0.875rem; } }
+  @media (max-width: 220px) { .panel-pad-lg { padding: 0.5rem; } }
+
+  /* Card header strip — the `px-5 py-4 ledger-rule` row above a list/table. */
+  .panel-head { padding: 1rem 1.25rem; }
+  @media (max-width: 380px) { .panel-head { padding: 0.75rem; } }
+  @media (max-width: 220px) { .panel-head { padding: 0.5rem; } }
+
+  /* Empty/loading/notice block inside a card. Vertical padding stays per usage;
+     this only owns the horizontal inset so it cannot eat the column. */
+  .panel-body { padding-inline: 1.25rem; }
+  @media (max-width: 380px) { .panel-body { padding-inline: 0.75rem; } }
+  @media (max-width: 220px) { .panel-body { padding-inline: 0.5rem; } }
+
+  /* Display headings step down with the column. */
+  .page-title {
+    font-family: var(--font-cormorant), Georgia, serif;
+    font-size: 1.5rem;
+    line-height: 1.2;
+    overflow-wrap: break-word;
+    /* Below ~380px a heading must wrap. Balancing keeps the lines even
+       instead of leaving a two-word orphan on the last one. */
+    text-wrap: balance;
+  }
+  @media (min-width: 640px) { .page-title { font-size: 1.875rem; } }
+  @media (max-width: 380px) { .page-title { font-size: 1.375rem; } }
+  @media (max-width: 220px) { .page-title { font-size: 1.125rem; } }
+
+  .panel-title {
+    font-family: var(--font-cormorant), Georgia, serif;
+    font-size: 1.25rem;
+    line-height: 1.3;
+    overflow-wrap: break-word;
+    text-wrap: balance;
+  }
+  @media (max-width: 380px) { .panel-title { font-size: 1.125rem; } }
+  /* 1rem -> 0.9375rem at the narrowest band. At 132px the content column is
+     88px and "membership" sets 89px in Cormorant, so break-word split it
+     mid-word into "members" / "hip". One more step puts it at 83px. Scoped to
+     card headings only, and only below 220px. */
+  @media (max-width: 220px) { .panel-title { font-size: 0.9375rem; } }
+
+  /* Shared form field + label. Every page used a local copy of this. */
+  .field { display: block; min-width: 0; }
+  .field-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #D9C7B8;
+    margin-bottom: 0.375rem;
+    overflow-wrap: break-word;
+  }
+  @media (max-width: 220px) { .field-label { font-size: 0.7rem; } }
+
+  /* Touch-target floor for touch-sized viewports. Desktop controls sit at
+     41px, but the padding bands shrink them to 41 -> 38 -> 34px as the column
+     narrows, and 33-35px is under the 44px both platform guidelines and
+     WCAG 2.5.5 ask for. Restoring 44px costs some vertical scroll and buys a
+     control that can actually be hit. Scoped to <=640px so the desktop layout
+     is untouched. */
+  @media (max-width: 640px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    select,
+    textarea,
+    .btn-gold,
+    .btn-ghost { min-height: 44px; }
+  }
+
+  /* A checkbox/radio with its text label. Every page rolled its own copy of
+     this row; the shared version keeps the native box from shrinking, gives
+     the sentence whatever width is left, and top-aligns the box against the
+     first text line so a wrapped label still reads as one block. */
+  .check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    min-width: 0;
+    max-width: 100%;
+    cursor: pointer;
+  }
+  .check-row > input[type="checkbox"],
+  .check-row > input[type="radio"] { flex: 0 0 auto; margin-top: 0.1875rem; }
+  .check-row > span { min-width: 0; overflow-wrap: break-word; }
+  .check-row > span > span { display: block; }
+
+  /* A .check-row is a <label> wrapping the native box, so the label itself is
+     the tap target - the 13px checkbox inside it is not independently hittable.
+     Left alone the row is only as tall as its own caption (measured 16px for
+     "Low stock only", 20px for "Combo service"), far under the 44px floor
+     applied to inputs and buttons above. Declared after the .check-row block
+     so it wins at equal specificity, and capped at the touch band so the
+     desktop table rows keep their tighter rhythm. */
+  @media (max-width: 640px) {
+    .check-row { min-height: 44px; align-items: center; }
+  }
+
+  /* A full-width button whose label is a sentence rather than a verb, so it
+     wraps below ~200px. Used together with .btn-ghost/.btn-gold: the label
+     hangs off the left edge with tight leading so 2-3 lines read as one block
+     instead of a centred squeeze. */
+  .stack-btn { text-align: left; line-height: 1.35; }
+  .stack-btn > span { min-width: 0; }
+
+  /* A text input with a trailing action button. Stacks until both fit. */
+  .action-row { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+  .action-row > * { width: 100%; min-width: 0; }
+  @media (min-width: 380px) {
+    .action-row { flex-direction: row; align-items: flex-end; }
+    .action-row > :first-child { flex: 1 1 auto; }
+    .action-row > :not(:first-child) { width: auto; flex: 0 0 auto; }
+  }
+
+  /* A group of filter/option selects: full-width stacked, then a row. */
+  .filter-row { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; width: 100%; }
+  .filter-row > * { width: 100%; min-width: 0; }
+  @media (min-width: 380px) {
+    .filter-row { flex-direction: row; }
+    .filter-row > * { flex: 1 1 0; }
+  }
+
+  /* A caption sitting on one line beside its control (the "Date"/"Month"
+     filters in card headers). Stacks the caption above the control when the
+     column is too narrow, and lets the control shrink past its intrinsic
+     width — a native date/month input is ~180px wide and used to force a
+     real body-level overflow. */
+  .inline-field {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .inline-field > * { min-width: 0; max-width: 100%; }
+  @media (min-width: 380px) {
+    .inline-field { flex-direction: row; align-items: center; gap: 0.5rem; }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Ultra-narrow band (<= 220px). Below any real handset, so this only has to
+   stop words from being wider than their column. Declared unlayered and last
+   so it wins over the component defaults above; `!`-prefixed utilities
+   (e.g. the compact `!py-1` table buttons) still win over it.
+--------------------------------------------------------------------------- */
+@media (max-width: 220px) {
+  .btn-gold { font-size: 0.72rem; padding-inline: 0.5rem; }
+  .btn-ghost { font-size: 0.72rem; padding-inline: 0.5rem; }
+  .pill { font-size: 0.66rem; padding-inline: 0.5rem; }
+
+  .stack-btn { line-height: 1.3; }
+
+  /* Hand the 4px the row gap was using back to the label text, and match the
+     scale of the field labels sitting right next to it — a 14px checkbox
+     caption beside an 11px field label was the odd one out. */
+  .check-row { gap: 0.25rem; font-size: 0.7rem; }
+
+  /* Buttons inside a table are laid out at the table's own intrinsic width —
+     the table scrolls horizontally inside its card — so shrinking them here
+     buys no space and only costs tap target. */
+  .ledger-table .btn-gold,
+  .ledger-table .btn-ghost { padding-inline: 0.875rem; }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select,
+  textarea { font-size: 0.78rem; padding: 7px 8px; }
+
+  /* The native file-picker button is ~176px of content on its own. Inside a
+     200px column it must lose its own inset as well as step down in type, or
+     the button itself gets clipped and the control looks broken. */
+  input[type="file"] { font-size: 0.64rem; padding: 4px 0; }
+  input[type="file"]::file-selector-button { padding: 2px 4px; margin-right: 3px; }
+
+  .ledger-table th { padding-inline: 0.5rem; }
+  .ledger-table td { padding-inline: 0.5rem; }
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }::-webkit-scrollbar-track { background: #2A0F1C; }
 ::-webkit-scrollbar-thumb { background: rgba(201,161,90,0.35); border-radius: 6px; }

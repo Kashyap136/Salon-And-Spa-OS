@@ -18,6 +18,8 @@ const attendanceSchema = new mongoose.Schema({
   date: { type: String, required: true },
   inTime: { type: String, default: "" },
   outTime: { type: String, default: "" },
+  // Hours between the punches, computed on the server during sync.
+  workedHours: { type: Number, default: 0, min: 0, max: 24 },
   status: { type: String, default: "present" },
   createdAt: { type: Date, default: Date.now },
 });

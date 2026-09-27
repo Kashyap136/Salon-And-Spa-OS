@@ -2,22 +2,35 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const Company = require("../models/Company");
 const { authRequired, signToken } = require("../middleware/auth");
+const { ownerCompany } = require("../utils/serializers");
+const { rateLimit } = require("../utils/rateLimit");
 
 const router = express.Router();
 
 const SALON_TYPES = ["unisex", "men", "women", "spa"];
 const LANGUAGES = ["Marathi", "Hindi", "English"];
 
+// Credential endpoints: bounded per client IP so a leaked password list cannot
+// be ground through this API. Generous enough for a busy salon counter.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: "Too many sign-in attempts. Please try again in a few minutes.",
+});
+
 // POST /api/auth/register — create a salon account.
-router.post("/register", async (req, res, next) => {
+router.post("/register", authLimiter, async (req, res, next) => {
   try {
     const { name, subdomain, ownerEmail, password, salonType, location } = req.body;
 
     if (!name || !subdomain || !ownerEmail || !password) {
       return res.status(400).json({ msg: "name, subdomain, ownerEmail and password are required" });
     }
-    if (String(password).length < 6) {
-      return res.status(400).json({ msg: "Password must be at least 6 characters" });
+    if (String(password).length < 8) {
+      return res.status(400).json({ msg: "Password must be at least 8 characters" });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(ownerEmail).trim())) {
+      return res.status(400).json({ msg: "Please provide a valid email address" });
     }
 
     const sub = String(subdomain).toLowerCase().trim();
@@ -50,17 +63,19 @@ router.post("/register", async (req, res, next) => {
 });
 
 // POST /api/auth/login — sign in by subdomain + owner email.
-router.post("/login", async (req, res, next) => {
+router.post("/login", authLimiter, async (req, res, next) => {
   try {
     const { subdomain, email, password } = req.body;
     if (!subdomain || !email || !password) {
       return res.status(400).json({ msg: "subdomain, email and password are required" });
     }
 
+    // passwordHash is select:false on the schema — opt in explicitly for the
+    // bcrypt comparison, and never return the document to the client.
     const company = await Company.findOne({
       subdomain: String(subdomain).toLowerCase().trim(),
       ownerEmail: String(email).toLowerCase().trim(),
-    });
+    }).select("+passwordHash");
     if (!company) return res.status(401).json({ msg: "Invalid credentials" });
 
     const ok = await bcrypt.compare(String(password), company.passwordHash);
@@ -123,11 +138,14 @@ router.put("/settings", authRequired, async (req, res, next) => {
     if (patch.language && !LANGUAGES.includes(patch.language)) {
       return res.status(400).json({ msg: "language must be Marathi, Hindi or English" });
     }
+    if (patch.salonType && !SALON_TYPES.includes(patch.salonType)) {
+      return res.status(400).json({ msg: "salonType must be unisex, men, women or spa" });
+    }
     const company = await Company.findByIdAndUpdate(req.companyId, patch, {
       new: true,
       runValidators: true,
     });
-    res.json({ msg: "Settings updated", company });
+    res.json({ msg: "Settings updated", company: ownerCompany(company) });
   } catch (err) {
     next(err);
   }

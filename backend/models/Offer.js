@@ -10,7 +10,19 @@ const offerSchema = new mongoose.Schema({
   code: { type: String, required: true, uppercase: true, trim: true },
   title: { type: String, default: "" },
   discountType: { type: String, enum: ["percent", "flat"], default: "percent" },
-  discountValue: { type: Number, required: true, min: 0 },
+  discountValue: {
+    type: Number,
+    required: true,
+    min: 0,
+    validate: {
+      validator(v) {
+        // A percentage discount can never exceed 100%; a flat one is bounded
+        // when it is applied (capped to the service total).
+        return this.discountType !== "percent" || v <= 100;
+      },
+      message: "percent discountValue cannot exceed 100",
+    },
+  },
   minOrderAmount: { type: Number, default: 0 },
   maxDiscount: { type: Number, default: 0 }, // 0 = no cap
   applicableServices: [{ type: mongoose.Schema.Types.ObjectId, ref: "Service" }],

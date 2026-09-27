@@ -55,11 +55,14 @@ export default function Navbar() {
 
   return (
     <header className="border-b border-ledger-gold/20 bg-ledger-base/95 backdrop-blur sticky top-0 z-40">
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
+      <div className="page max-w-[1400px] mx-auto">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 min-h-16 py-2 sm:py-0">
-          <div className="flex items-baseline gap-2 min-w-0">
-            <span className="font-display text-2xl text-ledger-gold shrink-0">Ledger</span>
-            <span className="text-xs text-ledger-creamDim truncate">
+          <div className="flex items-baseline gap-2 min-w-0 max-tiny:flex-col max-tiny:items-stretch max-tiny:gap-0">
+            <span className="font-display text-2xl max-tiny:text-lg text-ledger-gold shrink-0">Ledger</span>
+            {/* Truncates on desktop as before, but below 220px the wordmark
+                already fills the row, so the company name drops to its own line
+                and wraps instead of being squeezed to zero width. */}
+            <span className="text-xs text-ledger-creamDim truncate min-w-0 max-tiny:whitespace-normal max-tiny:overflow-visible max-tiny:text-ellipsis-clip">
               {session.companyName || session.subdomain || "Salon & Spa OS"}
             </span>
           </div>
@@ -77,7 +80,7 @@ export default function Navbar() {
               aria-label={menuOpen ? "Close navigation" : "Open navigation"}
               aria-expanded={menuOpen}
               aria-controls="mobile-nav-menu"
-              className="btn-ghost py-2 px-2.5 lg:hidden shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ledger-gold/70"
+              className="btn-ghost py-2 px-2.5 lg:hidden shrink-0 min-w-[44px] min-h-[44px] inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ledger-gold/70"
             >
               <span className="block relative w-5 h-4" aria-hidden="true">
                 <span
@@ -109,6 +112,7 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={active ? "page" : undefined}
                 className="px-3 py-2 text-sm whitespace-nowrap transition-colors shrink-0"
                 style={{
                   color: active ? "#E0BD7C" : "#D9C7B8",
@@ -132,8 +136,12 @@ export default function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
+                  aria-current={active ? "page" : undefined}
                   onClick={() => setMenuOpen(false)}
-                  className="px-3 py-2 text-sm whitespace-nowrap transition-colors"
+                  // The hamburger exists only on touch-sized viewports, so this
+                  // row is always finger-operated: keep the full 44px target
+                  // rather than the 36px that px-3/py-2 on a 14px line yields.
+                  className="px-3 py-2 min-h-[44px] inline-flex items-center text-sm max-tiny:px-1.5 max-tiny:text-xs whitespace-nowrap transition-colors"
                   style={{
                     color: active ? "#E0BD7C" : "#D9C7B8",
                     borderLeft: active ? "2px solid #C9A15A" : "2px solid transparent",

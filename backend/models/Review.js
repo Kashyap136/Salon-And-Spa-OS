@@ -14,4 +14,10 @@ const reviewSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+// One review per booking — a guest cannot stack reviews on a single visit.
+reviewSchema.index(
+  { bookingId: 1 },
+  { unique: true, partialFilterExpression: { bookingId: { $exists: true } } }
+);
+
 module.exports = mongoose.model("Review", reviewSchema);
